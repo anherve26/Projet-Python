@@ -1,0 +1,150 @@
+## Stockage Local des Données : Les données seront stockées localement et 
+## incluses dans le projet pour faciliter les tests.
+
+import yfinance as yf
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+
+dossier = "donnees_historiques"
+# Fonction pour charger les données historiques depuis Yahoo Finance et les
+# enregistrer dans notre repertoire local.
+
+def charger_donnees_yahoo(tickers, debut, fin):
+    # Dictionnaire pour stocker les données de chaque actif
+    data = {}
+    
+    # Créer le répertoire s'il n'existe pas déjà
+    if not os.path.exists(dossier):
+        os.makedirs(dossier)
+
+    # Récupérer les données pour chaque ticker
+    for ticker in tickers:
+        data[ticker] = yf.download(ticker, start=debut, end=fin)
+        # Enregistrer les données dans un fichier CSV dans le répertoire spécifié
+        chemin_fichier = os.path.join(dossier, f"{ticker}.csv")
+        data[ticker].to_csv(chemin_fichier)
+
+        print(f"Données de l'actif {ticker} chargées depuis Yahoo Finance")
+    
+    return data
+
+# Liste des tickers des actifs à télécharger
+tickers = ['GOOG']
+
+# Période de début et de fin pour les données historiques
+debut = '2023-01-01'
+fin = '2023-12-31'
+
+# Charger les données historiques depuis Yahoo Finance
+donnees = charger_donnees_yahoo(tickers, debut, fin)
+
+## Analyse d’Un Actif : Le backtester se concentrera sur un seul actif avec des positions 
+## variant entre -100% et 100%.
+
+# Fonction pour charger les données historiques depuis des fichiers CSV locaux
+def charger_donnees_locales(dossier):
+    # Dictionnaire pour stocker les données de chaque actif
+    data = {}
+    
+    # Liste des fichiers dans le dossier spécifié
+    fichiers = os.listdir(dossier)
+    
+    # Charger les données de chaque fichier CSV dans le dossier
+    for fichier in fichiers:
+        if fichier.endswith('.csv'):
+            nom_actif = fichier[:-4]  # Retirer l'extension .csv pour obtenir le nom de l'actif
+            chemin_fichier = os.path.join(dossier, fichier)
+            data[nom_actif] = pd.read_csv(chemin_fichier, parse_dates=['Date'], index_col='Date')
+            print(f"Données de l'actif {nom_actif} chargées depuis {chemin_fichier}")
+    
+    return data
+
+# Fonction pour implémenter la logique de la stratégie de trading
+def strategie_trading(data):
+    # Exemple de stratégie : acheter si le prix de clôture est supérieur à la moyenne mobile sur 50 périodes
+    signals = pd.DataFrame(index=data.index)
+    signals['Position'] = 0  # Initialiser toutes les positions à zéro
+    
+    # Générer les signaux d'achat et de vente en fonction de la stratégie
+    signals['Position'][data['Close'] > data['Close'].rolling(50).mean()] = 1  # Acheter
+    
+    return signals
+
+# Fonction pour simuler l'exécution des transactions
+def simuler_transactions(signals):
+    # Simuler l'exécution des transactions en utilisant des positions variantes entre -100% et 100%
+    # -1 pour une position courte, 0 pour une position neutre, et 1 pour une position longue
+    signals['Position'] = signals['Position'].fillna(0)  # Remplacer les valeurs NaN par 0
+    signals['Position'] = signals['Position'].replace(0, -1)  # Remplacer les positions neutres par -1
+    
+    return signals
+
+# Dossier contenant les données historiques
+dossier_stockage = "donnees_historiques"
+
+# Charger les données historiques depuis les fichiers CSV locaux
+donnees = charger_donnees_locales(dossier_stockage)
+
+# Exemple d'utilisation des données chargées pour un actif (à remplacer par vos propres données)
+nom_actif = list(donnees.keys())[0]
+data_actif = donnees[nom_actif]
+
+# Implémenter la logique de la stratégie de trading
+signals = strategie_trading(data_actif)
+
+# Simuler l'exécution des transactions
+transactions = simuler_transactions(signals)
+
+# Afficher les signaux de trading
+print("Signaux de trading pour l'actif", nom_actif)
+print(transactions)
+
+## Résultats : Génération d’un graphique représentant la performance de la stratégie 
+## sur la période choisie, accompagné de statistiques de base telles que le rendement moyen, 
+## la variance, et le bêta.
+
+# Fonction pour calculer la performance de la stratégie
+def calculer_performance(data, signals):
+    # Calculer la performance de la stratégie en utilisant les signaux de trading générés
+    # Supprimer les valeurs NaN du DataFrame de signaux
+    signals = signals.dropna()
+    
+    # Calculer le rendement quotidien en multipliant les signaux par le rendement quotidien des données
+    signals['Return'] = signals['Position'] * data['Close'].pct_change()
+    
+    # Supprimer les valeurs manquantes
+    signals = signals.dropna()
+    
+    # Calculer le rendement cumulé
+    cumulative_return = (signals['Return'] + 1).cumprod() - 1
+    
+    return signals, cumulative_return
+
+# Fonction pour afficher les statistiques de base et générer le graphique de performance
+def afficher_statistiques_et_graphique(data, signals, cumulative_return,nom_actif):
+    # Calculer les statistiques de base
+    mean_return = signals['Return'].mean()
+    variance = signals['Return'].var()
+    # Calcul du bêta (à ajouter)
+    
+    # Afficher les statistiques avec le graphique de performance
+    plt.figure(figsize=(10, 6))
+    plt.plot(cumulative_return.index, cumulative_return, label='Performance de la stratégie')
+    plt.xlabel('Date')
+    plt.ylabel('Performance')
+    plt.title(f'Performance de la stratégie au fil du temps pour {nom_actif}')
+    plt.legend()
+    plt.grid(True)
+    
+    plt.text(cumulative_return.index[-1], cumulative_return.iloc[-1], f'Rendement moyen : {mean_return:.2%}\nVariance : {variance:.2%}',
+             verticalalignment='bottom', horizontalalignment='right')
+    
+    plt.show()
+
+# Calculer la performance de la stratégie
+transactions, cumulative_return = calculer_performance(data_actif, transactions)
+
+# Afficher les statistiques de base et générer le graphique de performance
+afficher_statistiques_et_graphique(data_actif, transactions, cumulative_return,nom_actif)
+
